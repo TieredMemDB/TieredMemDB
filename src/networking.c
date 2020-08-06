@@ -84,7 +84,7 @@ void linkClient(client *c) {
 }
 
 client *createClient(int fd) {
-    client *c = zmalloc(sizeof(client));
+    client *c = zmalloc_dram(sizeof(client));
 
     /* passing -1 as fd it is possible to create a non connected client.
      * This is useful since all the commands needs to be executed
@@ -99,7 +99,7 @@ client *createClient(int fd) {
             readQueryFromClient, c) == AE_ERR)
         {
             close(fd);
-            zfree(c);
+            zfree_dram(c);
             return NULL;
         }
     }
@@ -112,8 +112,8 @@ client *createClient(int fd) {
     c->name = NULL;
     c->bufpos = 0;
     c->qb_pos = 0;
-    c->querybuf = sdsempty();
-    c->pending_querybuf = sdsempty();
+    c->querybuf = sdsdramempty();
+    c->pending_querybuf = sdsdramempty();
     c->querybuf_peak = 0;
     c->reqtype = 0;
     c->argc = 0;
@@ -134,7 +134,7 @@ client *createClient(int fd) {
     c->slave_listening_port = 0;
     c->slave_ip[0] = '\0';
     c->slave_capa = SLAVE_CAPA_NONE;
-    c->reply = listCreate();
+    c->reply = listCreateDRAM();
     c->reply_bytes = 0;
     c->obuf_soft_limit_reached_time = 0;
     listSetFreeMethod(c->reply,freeClientReplyValue);
@@ -149,9 +149,9 @@ client *createClient(int fd) {
     c->bpop.numreplicas = 0;
     c->bpop.reploffset = 0;
     c->woff = 0;
-    c->watched_keys = listCreate();
+    c->watched_keys = listCreateDRAM();
     c->pubsub_channels = dictCreate(&objectKeyPointerValueDictType,NULL);
-    c->pubsub_patterns = listCreate();
+    c->pubsub_patterns = listCreateDRAM();
     c->peerid = NULL;
     c->client_list_node = NULL;
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
@@ -183,7 +183,7 @@ void clientInstallWriteHandler(client *c) {
          * a system call. We'll only really install the write handler if
          * we'll not be able to write the whole reply at once. */
         c->flags |= CLIENT_PENDING_WRITE;
-        listAddNodeHead(server.clients_pending_write,c);
+        listAddNodeHeadDRAM(server.clients_pending_write,c);
     }
 }
 
@@ -773,7 +773,7 @@ void acceptUnixHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
 static void freeClientArgv(client *c) {
     int j;
     for (j = 0; j < c->argc; j++)
-        decrRefCount(c->argv[j]);
+        decrRefCountDRAM(c->argv[j]);
     c->argc = 0;
     c->cmd = NULL;
 }
@@ -830,7 +830,7 @@ void unlinkClient(client *c) {
     if (c->flags & CLIENT_PENDING_WRITE) {
         ln = listSearchKey(server.clients_pending_write,c);
         serverAssert(ln != NULL);
-        listDelNode(server.clients_pending_write,ln);
+        listDelNodeDRAM(server.clients_pending_write,ln);
         c->flags &= ~CLIENT_PENDING_WRITE;
     }
 
@@ -887,16 +887,16 @@ void freeClient(client *c) {
 
     /* UNWATCH all the keys */
     unwatchAllKeys(c);
-    listRelease(c->watched_keys);
+    listReleaseDRAM(c->watched_keys);
 
     /* Unsubscribe from all the pubsub channels */
     pubsubUnsubscribeAllChannels(c,0);
     pubsubUnsubscribeAllPatterns(c,0);
     dictRelease(c->pubsub_channels);
-    listRelease(c->pubsub_patterns);
+    listReleaseDRAM(c->pubsub_patterns);
 
     /* Free data structures. */
-    listRelease(c->reply);
+    listReleaseDRAM(c->reply);
     freeClientArgv(c);
 
     /* Unlink the client: this will close the socket, remove the I/O
@@ -938,10 +938,10 @@ void freeClient(client *c) {
     /* Release other dynamically allocated client structure fields,
      * and finally release the client structure itself. */
     if (c->name) decrRefCount(c->name);
-    zfree(c->argv);
+    zfree_dram(c->argv);
     freeClientMultiState(c);
     sdsfree(c->peerid);
-    zfree(c);
+    zfree_dram(c);
 }
 
 /* Schedule a client to free it at a safe time in the serverCron() function.
@@ -1088,7 +1088,7 @@ int handleClientsWithPendingWrites(void) {
     while((ln = listNext(&li))) {
         client *c = listNodeValue(ln);
         c->flags &= ~CLIENT_PENDING_WRITE;
-        listDelNode(server.clients_pending_write,ln);
+        listDelNodeDRAM(server.clients_pending_write,ln);
 
         /* If a client is protected, don't do anything,
          * that may trigger write error or recreate handler. */
@@ -1224,8 +1224,8 @@ int processInlineBuffer(client *c) {
 
     /* Setup argv array on client structure */
     if (argc) {
-        if (c->argv) zfree(c->argv);
-        c->argv = zmalloc(sizeof(robj*)*argc);
+        if (c->argv) zfree_dram(c->argv);
+        c->argv = zmalloc_dram(sizeof(robj*)*argc);
     }
 
     /* Create redis objects for all arguments. */
@@ -1322,8 +1322,8 @@ int processMultibulkBuffer(client *c) {
         c->multibulklen = ll;
 
         /* Setup argv array on client structure */
-        if (c->argv) zfree(c->argv);
-        c->argv = zmalloc(sizeof(robj*)*c->multibulklen);
+        if (c->argv) zfree_dram(c->argv);
+        c->argv = zmalloc_dram(sizeof(robj*)*c->multibulklen);
     }
 
     serverAssertWithInfo(c,NULL,c->multibulklen > 0);
@@ -1962,7 +1962,7 @@ void rewriteClientCommandVector(client *c, int argc, ...) {
     int j;
     robj **argv; /* The new argument vector */
 
-    argv = zmalloc(sizeof(robj*)*argc);
+    argv = zmalloc_dram(sizeof(robj*)*argc);
     va_start(ap,argc);
     for (j = 0; j < argc; j++) {
         robj *a;
@@ -1975,7 +1975,7 @@ void rewriteClientCommandVector(client *c, int argc, ...) {
      * sure that if the same objects are reused in the new vector the
      * refcount gets incremented before it gets decremented. */
     for (j = 0; j < c->argc; j++) decrRefCount(c->argv[j]);
-    zfree(c->argv);
+    zfree_dram(c->argv);
     /* Replace argv and argc with our new versions. */
     c->argv = argv;
     c->argc = argc;
@@ -1987,7 +1987,7 @@ void rewriteClientCommandVector(client *c, int argc, ...) {
 /* Completely replace the client command vector with the provided one. */
 void replaceClientCommandVector(client *c, int argc, robj **argv) {
     freeClientArgv(c);
-    zfree(c->argv);
+    zfree_dram(c->argv);
     c->argv = argv;
     c->argc = argc;
     c->cmd = lookupCommandOrOriginal(c->argv[0]->ptr);
@@ -2009,7 +2009,7 @@ void rewriteClientCommandArgument(client *c, int i, robj *newval) {
     robj *oldval;
 
     if (i >= c->argc) {
-        c->argv = zrealloc(c->argv,sizeof(robj*)*(i+1));
+        c->argv = zrealloc_dram(c->argv,sizeof(robj*)*(i+1));
         c->argc = i+1;
         c->argv[i] = NULL;
     }

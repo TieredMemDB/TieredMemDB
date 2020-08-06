@@ -1445,6 +1445,9 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, robj *key) {
 
         /* Load every single element of the list */
         while(len--) {
+            if (len%100 == 0) {
+                adjustPmemThresholdCycle();
+            }
             if ((ele = rdbLoadEncodedStringObject(rdb)) == NULL) return NULL;
             dec = getDecodedObject(ele);
             size_t len = sdslen(dec->ptr);
@@ -1473,6 +1476,10 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, robj *key) {
         for (i = 0; i < len; i++) {
             long long llval;
             sds sdsele;
+
+            if (i%100 == 0) {
+                adjustPmemThresholdCycle();
+            }
 
             if ((sdsele = rdbGenericLoadStringObject(rdb,RDB_LOAD_SDS,NULL))
                 == NULL) return NULL;
@@ -1513,6 +1520,10 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, robj *key) {
             sds sdsele;
             double score;
             zskiplistNode *znode;
+
+            if (zsetlen%100 == 0) {
+                adjustPmemThresholdCycle();
+            }
 
             if ((sdsele = rdbGenericLoadStringObject(rdb,RDB_LOAD_SDS,NULL))
                 == NULL) return NULL;
@@ -1555,6 +1566,11 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, robj *key) {
         /* Load every field and value into the ziplist */
         while (o->encoding == OBJ_ENCODING_ZIPLIST && len > 0) {
             len--;
+
+            if (len%100 == 0) {
+                adjustPmemThresholdCycle();
+            }
+
             /* Load raw strings */
             if ((field = rdbGenericLoadStringObject(rdb,RDB_LOAD_SDS,NULL))
                 == NULL) return NULL;
@@ -1612,6 +1628,9 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, robj *key) {
                             server.list_compress_depth);
 
         while (len--) {
+            if (len%100 == 0) {
+                adjustPmemThresholdCycle();
+            }
             unsigned char *zl =
                 rdbGenericLoadStringObject(rdb,RDB_LOAD_PLAIN,NULL);
             if (zl == NULL) return NULL;
@@ -1912,6 +1931,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi, int loading_aof) {
     int type, rdbver;
     redisDb *db = server.db+0;
     char buf[1024];
+    int i = 0;
 
     rdb->update_cksum = rdbLoadProgressCallback;
     rdb->max_processing_chunk = server.loading_process_events_interval_bytes;
@@ -1935,7 +1955,11 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi, int loading_aof) {
     
     while(1) {
         robj *key, *val;
-
+        i++;
+        if (i%1000 == 0) {
+            i=0;
+            adjustPmemThresholdCycle();
+        }
         /* Read type. */
         if ((type = rdbLoadType(rdb)) == -1) goto eoferr;
 

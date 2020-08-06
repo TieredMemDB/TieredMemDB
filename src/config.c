@@ -91,6 +91,14 @@ configEnum aof_fsync_enum[] = {
     {NULL, 0}
 };
 
+configEnum memory_alloc_policy_enum[] = {
+    {"only-dram", MEM_POLICY_ONLY_DRAM},
+    {"only-pmem", MEM_POLICY_ONLY_PMEM},
+    {"threshold", MEM_POLICY_THRESHOLD},
+    {"ratio", MEM_POLICY_RATIO},
+    {NULL, 0}
+};
+
 /* Output buffer limits presets. */
 clientBufferLimitsConfig clientBufferLimitsDefaults[CLIENT_TYPE_OBUF_COUNT] = {
     {0, 0, 0}, /* normal */
@@ -254,6 +262,15 @@ void loadServerConfigFromString(char *config) {
             } else if (argc == 2 && !strcasecmp(argv[1],"")) {
                 resetServerSaveParams();
             }
+        } else if (!strcasecmp(argv[0],"dram-pmem-ratio") && argc == 3) {
+                int dram = atoi(argv[1]);
+                int pmem = atoi(argv[2]);
+                if (dram == 0 || pmem == 0) {
+                  err = "Invalid dram-pmem-ratio parameters"; goto loaderr;
+                }
+                server.dram_pmem_ratio.dram_val = dram;
+                server.dram_pmem_ratio.pmem_val = pmem;
+                server.target_pmem_dram_ratio = (double)pmem/dram;
         } else if (!strcasecmp(argv[0],"dir") && argc == 2) {
             if (chdir(argv[1]) == -1) {
                 serverLog(LL_WARNING,"Can't chdir to '%s': %s",
@@ -316,6 +333,35 @@ void loadServerConfigFromString(char *config) {
             if (server.maxclients < 1) {
                 err = "Invalid max clients limit"; goto loaderr;
             }
+        } else if (!strcasecmp(argv[0],"initial-dynamic-threshold") && argc == 2) {
+            server.initial_dynamic_threshold = atoi(argv[1]);
+            if (server.initial_dynamic_threshold < 1) {
+                err = "Invalid initial dynamic threshold"; goto loaderr;
+            }
+        } else if (!strcasecmp(argv[0],"dynamic-threshold-min") && argc == 2) {
+            server.dynamic_threshold_min = atoi(argv[1]);
+            if (server.dynamic_threshold_min < 1) {
+                err = "Invalid initial dynamic threshold min"; goto loaderr;
+            }
+        } else if (!strcasecmp(argv[0],"dynamic-threshold-max") && argc == 2) {
+            server.dynamic_threshold_max = atoi(argv[1]);
+            if (server.dynamic_threshold_max < 1) {
+                err = "Invalid initial dynamic threshold max"; goto loaderr;
+            }
+        } else if (!strcasecmp(argv[0],"static-threshold") && argc == 2) {
+            server.static_threshold = atoi(argv[1]);
+            if (server.static_threshold < 1) {
+                err = "Invalid initial static threshold"; goto loaderr;
+            }
+        } else if (!strcasecmp(argv[0],"memory-ratio-check-period") && argc == 2) {
+            server.ratio_check_period = atoi(argv[1]);
+            if (server.ratio_check_period < 1) {
+                err = "Invalid number of memory ratio check period"; goto loaderr;
+            }
+        } else if (!strcasecmp(argv[0],"hashtable-on-dram") && argc == 2) {
+            if ((server.hashtable_on_dram = yesnotoi(argv[1])) == -1) {
+                err = "argument must be 'yes' or 'no'"; goto loaderr;
+            }
         } else if (!strcasecmp(argv[0],"maxmemory") && argc == 2) {
             server.maxmemory = memtoll(argv[1],NULL);
         } else if (!strcasecmp(argv[0],"maxmemory-policy") && argc == 2) {
@@ -345,6 +391,13 @@ void loadServerConfigFromString(char *config) {
             server.lfu_decay_time = atoi(argv[1]);
             if (server.lfu_decay_time < 0) {
                 err = "lfu-decay-time must be 0 or greater";
+                goto loaderr;
+            }
+        } else if (!strcasecmp(argv[0],"memory-alloc-policy") && argc == 2) {
+            server.memory_alloc_policy =
+                configEnumGetValue(memory_alloc_policy_enum,argv[1]);
+            if (server.memory_alloc_policy == INT_MIN) {
+                err = "Invalid memory allocate policy";
                 goto loaderr;
             }
         } else if ((!strcasecmp(argv[0],"slaveof") ||
@@ -814,6 +867,21 @@ void loadServerConfigFromString(char *config) {
         i = linenum-1;
         err = "replicaof directive not allowed in cluster mode";
         goto loaderr;
+    }
+
+    if (server.memory_alloc_policy == MEM_POLICY_RATIO) {
+        if (server.dynamic_threshold_min > server.initial_dynamic_threshold) {
+            err = "dynamic threshold: initial value must be greater than or equal to minimum value for ratio memory allocation policy";
+            goto loaderr;
+        }
+        if (server.dynamic_threshold_max < server.initial_dynamic_threshold) {
+            err = "dynamic threshold: initial value must be less than or equal to maximum value for ratio memory allocation policy";
+            goto loaderr;
+        }
+        if (server.dram_pmem_ratio.pmem_val == 0 && server.dram_pmem_ratio.dram_val == 0) {
+            err = "dram-pmem-ratio must be defined for ratio memory allocation policy";
+            goto loaderr;
+        }
     }
 
     sdsfreesplitres(lines,totlines);
@@ -1416,6 +1484,11 @@ void configGetCommand(client *c) {
     config_get_numerical_field("cluster-replica-validity-factor",server.cluster_slave_validity_factor);
     config_get_numerical_field("repl-diskless-sync-delay",server.repl_diskless_sync_delay);
     config_get_numerical_field("tcp-keepalive",server.tcpkeepalive);
+    config_get_numerical_field("memory-ratio-check-period",server.ratio_check_period);
+    config_get_numerical_field("initial-dynamic-threshold",server.initial_dynamic_threshold);
+    config_get_numerical_field("dynamic-threshold-min",server.dynamic_threshold_min);
+    config_get_numerical_field("dynamic-threshold-max",server.dynamic_threshold_max);
+    config_get_numerical_field("static-threshold",server.static_threshold);
 
     /* Bool (yes/no) values */
     config_get_bool_field("cluster-require-full-coverage",
@@ -1456,6 +1529,8 @@ void configGetCommand(client *c) {
             server.rdb_save_incremental_fsync);
     config_get_bool_field("aof-load-truncated",
             server.aof_load_truncated);
+    config_get_bool_field("hashtable-on-dram",
+            server.hashtable_on_dram);
     config_get_bool_field("aof-use-rdb-preamble",
             server.aof_use_rdb_preamble);
     config_get_bool_field("lazyfree-lazy-eviction",
@@ -1482,6 +1557,8 @@ void configGetCommand(client *c) {
             server.aof_fsync,aof_fsync_enum);
     config_get_enum_field("syslog-facility",
             server.syslog_facility,syslog_facility_enum);
+    config_get_enum_field("memory-alloc-policy",
+            server.memory_alloc_policy,memory_alloc_policy_enum);
 
     /* Everything we can't handle with macros follows. */
 
@@ -1532,6 +1609,13 @@ void configGetCommand(client *c) {
         addReplyBulkCString(c,"client-output-buffer-limit");
         addReplyBulkCString(c,buf);
         sdsfree(buf);
+        matches++;
+    }
+    if  (stringmatch(pattern,"dram-pmem-ratio",1)) {
+        char buf[32];
+        snprintf(buf,sizeof(buf),"%d %d", server.dram_pmem_ratio.dram_val, server.dram_pmem_ratio.pmem_val);
+        addReplyBulkCString(c,"dram-pmem-ratio");
+        addReplyBulkCString(c,buf);
         matches++;
     }
     if (stringmatch(pattern,"unixsocketperm",1)) {
@@ -2170,6 +2254,12 @@ int rewriteConfig(char *path) {
     rewriteConfigBytesOption(state,"proto-max-bulk-len",server.proto_max_bulk_len,CONFIG_DEFAULT_PROTO_MAX_BULK_LEN);
     rewriteConfigBytesOption(state,"client-query-buffer-limit",server.client_max_querybuf_len,PROTO_MAX_QUERYBUF_LEN);
     rewriteConfigEnumOption(state,"maxmemory-policy",server.maxmemory_policy,maxmemory_policy_enum,CONFIG_DEFAULT_MAXMEMORY_POLICY);
+    rewriteConfigEnumOption(state,"memory-alloc-policy",server.memory_alloc_policy,memory_alloc_policy_enum,MEM_POLICY_ONLY_DRAM);
+    rewriteConfigNumericalOption(state,"memory-ratio-check-period",server.ratio_check_period,100);
+    rewriteConfigNumericalOption(state,"initial-dynamic-threshold",server.initial_dynamic_threshold,64);
+    rewriteConfigNumericalOption(state,"dynamic-threshold-min",server.dynamic_threshold_min,24);
+    rewriteConfigNumericalOption(state,"dynamic-threshold-max",server.dynamic_threshold_max,10000);
+    rewriteConfigNumericalOption(state,"static-threshold",server.static_threshold,64);
     rewriteConfigNumericalOption(state,"maxmemory-samples",server.maxmemory_samples,CONFIG_DEFAULT_MAXMEMORY_SAMPLES);
     rewriteConfigNumericalOption(state,"lfu-log-factor",server.lfu_log_factor,CONFIG_DEFAULT_LFU_LOG_FACTOR);
     rewriteConfigNumericalOption(state,"lfu-decay-time",server.lfu_decay_time,CONFIG_DEFAULT_LFU_DECAY_TIME);

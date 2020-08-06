@@ -1017,6 +1017,13 @@ void databasesCron(void) {
         }
     }
 
+    /* Adjust PMEM threshold. */
+    if (server.memory_alloc_policy == MEM_POLICY_RATIO) {
+        run_with_period(server.ratio_check_period) {
+            adjustPmemThresholdCycle();
+        }
+    }
+
     /* Defrag keys gradually. */
     if (server.active_defrag_enabled)
         activeDefragCycle();
@@ -2201,6 +2208,8 @@ void initServer(void) {
     scriptingInit(1);
     slowlogInit();
     latencyMonitorInit();
+    pmemThresholdInit();
+    dictSetAllocPolicy(server.hashtable_on_dram);
 }
 
 /* Some steps in server initialization need to be done last (after modules
@@ -2341,13 +2350,8 @@ struct redisCommand *lookupCommandOrOriginal(sds name) {
  * + PROPAGATE_AOF (propagate into the AOF file if is enabled)
  * + PROPAGATE_REPL (propagate into the replication link)
  *
- * This should not be used inside commands implementation since it will not
- * wrap the resulting commands in MULTI/EXEC. Use instead alsoPropagate(),
- * preventCommandPropagation(), forceCommandPropagation().
- *
- * However for functions that need to (also) propagate out of the context of a
- * command execution, for example when serving a blocked client, you
- * want to use propagate().
+ * This should not be used inside commands implementation. Use instead
+ * alsoPropagate(), preventCommandPropagation(), forceCommandPropagation().
  */
 void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
                int flags)
@@ -3237,6 +3241,8 @@ sds genRedisInfoString(char *section) {
     /* Memory */
     if (allsections || defsections || !strcasecmp(section,"memory")) {
         char hmem[64];
+        char hmem_dram[64];
+        char hmem_pmem[64];
         char peak_hmem[64];
         char total_system_hmem[64];
         char used_memory_lua_hmem[64];
@@ -3244,7 +3250,10 @@ sds genRedisInfoString(char *section) {
         char used_memory_rss_hmem[64];
         char maxmemory_hmem[64];
         size_t zmalloc_used = zmalloc_used_memory();
+        size_t zmalloc_dram_used = zmalloc_used_dram_memory();
+        size_t zmalloc_pmem_used = zmalloc_used_pmem_memory();
         size_t total_system_mem = server.system_memory_size;
+        size_t pmem_threshold = zmalloc_get_threshold();
         const char *evict_policy = evictPolicyToString();
         long long memory_lua = (long long)lua_gc(server.lua,LUA_GCCOUNT,0)*1024;
         struct redisMemOverhead *mh = getMemoryOverheadData();
@@ -3257,6 +3266,8 @@ sds genRedisInfoString(char *section) {
             server.stat_peak_memory = zmalloc_used;
 
         bytesToHuman(hmem,zmalloc_used);
+        bytesToHuman(hmem_dram,zmalloc_dram_used);
+        bytesToHuman(hmem_pmem,zmalloc_pmem_used);
         bytesToHuman(peak_hmem,server.stat_peak_memory);
         bytesToHuman(total_system_hmem,total_system_mem);
         bytesToHuman(used_memory_lua_hmem,memory_lua);
@@ -3278,6 +3289,11 @@ sds genRedisInfoString(char *section) {
             "used_memory_startup:%zu\r\n"
             "used_memory_dataset:%zu\r\n"
             "used_memory_dataset_perc:%.2f%%\r\n"
+            "pmem_threshold:%zu\r\n"
+            "used_memory_dram:%zu\r\n"
+            "used_memory_dram_human:%s\r\n"
+            "used_memory_pmem:%zu\r\n"
+            "used_memory_pmem_human:%s\r\n"
             "allocator_allocated:%zu\r\n"
             "allocator_active:%zu\r\n"
             "allocator_resident:%zu\r\n"
@@ -3294,11 +3310,11 @@ sds genRedisInfoString(char *section) {
             "allocator_frag_ratio:%.2f\r\n"
             "allocator_frag_bytes:%zu\r\n"
             "allocator_rss_ratio:%.2f\r\n"
-            "allocator_rss_bytes:%zd\r\n"
+            "allocator_rss_bytes:%zu\r\n"
             "rss_overhead_ratio:%.2f\r\n"
-            "rss_overhead_bytes:%zd\r\n"
+            "rss_overhead_bytes:%zu\r\n"
             "mem_fragmentation_ratio:%.2f\r\n"
-            "mem_fragmentation_bytes:%zd\r\n"
+            "mem_fragmentation_bytes:%zu\r\n"
             "mem_not_counted_for_evict:%zu\r\n"
             "mem_replication_backlog:%zu\r\n"
             "mem_clients_slaves:%zu\r\n"
@@ -3318,6 +3334,11 @@ sds genRedisInfoString(char *section) {
             mh->startup_allocated,
             mh->dataset,
             mh->dataset_perc,
+            pmem_threshold,
+            zmalloc_dram_used,
+            hmem_dram,
+            zmalloc_pmem_used,
+            hmem_pmem,
             server.cron_malloc_stats.allocator_allocated,
             server.cron_malloc_stats.allocator_active,
             server.cron_malloc_stats.allocator_resident,
@@ -4243,6 +4264,8 @@ int main(int argc, char **argv) {
             return crc64Test(argc, argv);
         } else if (!strcasecmp(argv[2], "zmalloc")) {
             return zmalloc_test(argc, argv);
+        } else if (!strcasecmp(argv[2], "pmem")) {
+            return zmalloc_pmem_test(argc, argv);
         }
 
         return -1; /* test not found */
