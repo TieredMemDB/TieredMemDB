@@ -70,6 +70,20 @@ void* activeDefragAlloc(void *ptr) {
     zfree_no_tcache(ptr);
     return newptr;
 }
+#endif
+
+#ifdef HAVE_DEFRAG_MEMKIND
+void* activeDefragAlloc(void *ptr) {
+    void* newptr = memkind_defrag_reallocate(NULL, ptr);
+    if (!newptr) server.stat_active_defrag_misses++;
+    return newptr;
+}
+#endif
+
+#if defined(HAVE_DEFRAG) || defined(HAVE_DEFRAG_MEMKIND)
+/* forward declarations*/
+void defragDictBucketCallback(dict *d, dictEntry **bucketref);
+dictEntry* replaceSatelliteDictKeyPtrAndOrDefragDictEntry(dict *d, sds oldkey, sds newkey, uint64_t hash, long *defragged);
 
 /*Defrag helper for sds strings
  *

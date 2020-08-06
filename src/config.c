@@ -103,6 +103,14 @@ configEnum shutdown_on_sig_enum[] = {
     {NULL, 0}
 };
 
+configEnum memory_alloc_policy_enum[] = {
+    {"only-dram", MEM_POLICY_ONLY_DRAM},
+    {"only-pmem", MEM_POLICY_ONLY_PMEM},
+    {"threshold", MEM_POLICY_THRESHOLD},
+    {"ratio", MEM_POLICY_RATIO},
+    {NULL, 0}
+};
+
 configEnum repl_diskless_load_enum[] = {
     {"disabled", REPL_DISKLESS_LOAD_DISABLED},
     {"on-empty-db", REPL_DISKLESS_LOAD_WHEN_DB_EMPTY},
@@ -526,7 +534,16 @@ void loadServerConfigFromString(char *config) {
         }
 
         /* Execute config directives */
-        if (!strcasecmp(argv[0],"include") && argc == 2) {
+        if (!strcasecmp(argv[0],"dram-pmem-ratio") && argc == 3) {
+                int dram = atoi(argv[1]);
+                int pmem = atoi(argv[2]);
+                if (dram == 0 || pmem == 0) {
+                  err = "Invalid dram-pmem-ratio parameters"; goto loaderr;
+                }
+                server.dram_pmem_ratio.dram_val = dram;
+                server.dram_pmem_ratio.pmem_val = pmem;
+                server.target_pmem_dram_ratio = (double)pmem/dram;
+        } else if (!strcasecmp(argv[0],"include") && argc == 2) {
             loadServerConfig(argv[1], 0, NULL);
         } else if (!strcasecmp(argv[0],"rename-command") && argc == 3) {
             struct redisCommand *cmd = lookupCommandBySds(argv[1]);
@@ -612,6 +629,21 @@ void loadServerConfigFromString(char *config) {
     /* To ensure backward compatibility and work while hz is out of range */
     if (server.config_hz < CONFIG_MIN_HZ) server.config_hz = CONFIG_MIN_HZ;
     if (server.config_hz > CONFIG_MAX_HZ) server.config_hz = CONFIG_MAX_HZ;
+
+    if (server.memory_alloc_policy == MEM_POLICY_RATIO) {
+        if (server.dynamic_threshold_min > server.initial_dynamic_threshold) {
+            err = "dynamic threshold: initial value must be greater than or equal to minimum value for ratio memory allocation policy";
+            goto loaderr;
+        }
+        if (server.dynamic_threshold_max < server.initial_dynamic_threshold) {
+            err = "dynamic threshold: initial value must be less than or equal to maximum value for ratio memory allocation policy";
+            goto loaderr;
+        }
+        if (server.dram_pmem_ratio.pmem_val == 0 && server.dram_pmem_ratio.dram_val == 0) {
+            err = "dram-pmem-ratio must be defined for ratio memory allocation policy";
+            goto loaderr;
+        }
+    }
 
     sdsfreesplitres(lines,totlines);
     reading_config_file = 0;
@@ -2306,12 +2338,12 @@ static void numericConfigRewrite(standardConfig *config, const char *name, struc
 }
 
 static int isValidActiveDefrag(int val, const char **err) {
-#ifndef HAVE_DEFRAG
+#if !defined(HAVE_DEFRAG) && !defined(HAVE_DEFRAG_MEMKIND)
     if (val) {
         *err = "Active defragmentation cannot be enabled: it "
                "requires a Redis server compiled with a modified Jemalloc "
                "like the one shipped by default with the Redis source "
-               "distribution";
+               "distribution, or memkind";
         return 0;
     }
 #else
@@ -2486,6 +2518,15 @@ static int updateSighandlerEnabled(const char **err) {
         setupSignalHandlers();
     else
         removeSignalHandlers();
+    return 1;
+}
+
+static int updateStaticthreshold(const char **err) {
+    UNUSED(err);
+    if (server.memory_alloc_policy == MEM_POLICY_THRESHOLD) {
+        zmalloc_set_threshold((size_t)server.static_threshold);
+    }
+
     return 1;
 }
 
@@ -2969,6 +3010,7 @@ standardConfig static_configs[] = {
     createBoolConfig("latency-tracking", NULL, MODIFIABLE_CONFIG, server.latency_tracking_enabled, 1, NULL, NULL),
     createBoolConfig("aof-disable-auto-gc", NULL, MODIFIABLE_CONFIG, server.aof_disable_auto_gc, 0, NULL, updateAofAutoGCEnabled),
     createBoolConfig("replica-ignore-disk-write-errors", NULL, MODIFIABLE_CONFIG, server.repl_ignore_disk_write_error, 0, NULL, NULL),
+    createBoolConfig("hashtable-on-dram", NULL, IMMUTABLE_CONFIG, server.hashtable_on_dram, 1, NULL, NULL),
 
     /* String Configs */
     createStringConfig("aclfile", NULL, IMMUTABLE_CONFIG, ALLOW_EMPTY_STRING, server.acl_filename, "", NULL, NULL),
@@ -3013,6 +3055,7 @@ standardConfig static_configs[] = {
     createEnumConfig("propagation-error-behavior", NULL, MODIFIABLE_CONFIG, propagation_error_behavior_enum, server.propagation_error_behavior, PROPAGATION_ERR_BEHAVIOR_IGNORE, NULL, NULL),
     createEnumConfig("shutdown-on-sigint", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, shutdown_on_sig_enum, server.shutdown_on_sigint, 0, isValidShutdownOnSigFlags, NULL),
     createEnumConfig("shutdown-on-sigterm", NULL, MODIFIABLE_CONFIG | MULTI_ARG_CONFIG, shutdown_on_sig_enum, server.shutdown_on_sigterm, 0, isValidShutdownOnSigFlags, NULL),
+    createEnumConfig("memory-alloc-policy", NULL, IMMUTABLE_CONFIG, memory_alloc_policy_enum, server.memory_alloc_policy, MEM_POLICY_ONLY_DRAM, NULL, NULL),
 
     /* Integer configs */
     createIntConfig("databases", NULL, IMMUTABLE_CONFIG, 1, INT_MAX, server.dbnum, 16, INTEGER_CONFIG, NULL, NULL),
@@ -3052,11 +3095,16 @@ standardConfig static_configs[] = {
     createIntConfig("watchdog-period", NULL, MODIFIABLE_CONFIG | HIDDEN_CONFIG, 0, INT_MAX, server.watchdog_period, 0, INTEGER_CONFIG, NULL, updateWatchdogPeriod),
     createIntConfig("shutdown-timeout", NULL, MODIFIABLE_CONFIG, 0, INT_MAX, server.shutdown_timeout, 10, INTEGER_CONFIG, NULL, NULL),
     createIntConfig("repl-diskless-sync-max-replicas", NULL, MODIFIABLE_CONFIG, 0, INT_MAX, server.repl_diskless_sync_max_replicas, 0, INTEGER_CONFIG, NULL, NULL),
+    createIntConfig("memory-ratio-check-period", NULL, IMMUTABLE_CONFIG, 1, INT_MAX, server.ratio_check_period, 100, INTEGER_CONFIG, NULL, NULL),
 
     /* Unsigned int configs */
     createUIntConfig("maxclients", NULL, MODIFIABLE_CONFIG, 1, UINT_MAX, server.maxclients, 10000, INTEGER_CONFIG, NULL, updateMaxclients),
     createUIntConfig("unixsocketperm", NULL, IMMUTABLE_CONFIG, 0, 0777, server.unixsocketperm, 0, OCTAL_CONFIG, NULL, NULL),
     createUIntConfig("socket-mark-id", NULL, IMMUTABLE_CONFIG, 0, UINT_MAX, server.socket_mark_id, 0, INTEGER_CONFIG, NULL, NULL),
+    createUIntConfig("initial-dynamic-threshold", NULL, IMMUTABLE_CONFIG, 0, UINT_MAX, server.initial_dynamic_threshold, 64, INTEGER_CONFIG, NULL, NULL),
+    createUIntConfig("dynamic-threshold-min", NULL, IMMUTABLE_CONFIG, 0, UINT_MAX, server.dynamic_threshold_min, 24, INTEGER_CONFIG, NULL, NULL),
+    createUIntConfig("dynamic-threshold-max", NULL, IMMUTABLE_CONFIG, 0, UINT_MAX, server.dynamic_threshold_max, 10000, INTEGER_CONFIG, NULL, NULL),
+    createUIntConfig("static-threshold", NULL, MODIFIABLE_CONFIG, 0, UINT_MAX, server.static_threshold, 64, INTEGER_CONFIG, NULL, updateStaticthreshold),
 
     /* Unsigned Long configs */
     createULongConfig("active-defrag-max-scan-fields", NULL, MODIFIABLE_CONFIG, 1, LONG_MAX, server.active_defrag_max_scan_fields, 1000, INTEGER_CONFIG, NULL, NULL), /* Default: keys with more than 1000 fields will be processed separately */
