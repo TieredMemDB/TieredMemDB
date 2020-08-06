@@ -61,6 +61,7 @@
  * the number of elements and the buckets > dict_force_resize_ratio. */
 static int dict_can_resize = 1;
 static unsigned int dict_force_resize_ratio = 5;
+static int dict_always_on_dram = 1;
 
 /* -------------------------- private prototypes ---------------------------- */
 
@@ -79,6 +80,10 @@ void dictSetHashFunctionSeed(uint8_t *seed) {
 
 uint8_t *dictGetHashFunctionSeed(void) {
     return dict_hash_function_seed;
+}
+
+void dictSetAllocPolicy(int policy) {
+    dict_always_on_dram = policy;
 }
 
 /* The default hashing function uses SipHash implementation
@@ -160,7 +165,7 @@ int dictExpand(dict *d, unsigned long size)
     /* Allocate the new hash table and initialize all pointers to NULL */
     n.size = realsize;
     n.sizemask = realsize-1;
-    n.table = zcalloc(realsize*sizeof(dictEntry*));
+    n.table = (dict_always_on_dram) ? zcalloc_dram(realsize*sizeof(dictEntry*)) : zcalloc(realsize*sizeof(dictEntry*));
     n.used = 0;
 
     /* Is this the first initialization? If so it's not really a rehashing
@@ -543,7 +548,7 @@ long long dictFingerprint(dict *d) {
 
 dictIterator *dictGetIterator(dict *d)
 {
-    dictIterator *iter = zmalloc(sizeof(*iter));
+    dictIterator *iter = zmalloc_dram(sizeof(*iter));
 
     iter->d = d;
     iter->table = 0;
@@ -604,7 +609,7 @@ void dictReleaseIterator(dictIterator *iter)
         else
             assert(iter->fingerprint == dictFingerprint(iter->d));
     }
-    zfree(iter);
+    zfree_dram(iter);
 }
 
 /* Return a random entry from the hash table. Useful to
