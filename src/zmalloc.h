@@ -55,6 +55,12 @@
 #error "Newer version of jemalloc required"
 #endif
 
+#elif defined(USE_MEMKIND)
+#define ZMALLOC_LIB "memkind"
+#include <memkind.h>
+#define HAVE_MALLOC_SIZE 1
+#define zmalloc_size(p) memkind_malloc_usable_size(NULL, p)
+
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
 #define HAVE_MALLOC_SIZE 1
@@ -76,13 +82,19 @@
 #if defined(USE_JEMALLOC) && defined(JEMALLOC_FRAG_HINT)
 #define HAVE_DEFRAG
 #endif
+#if defined(USE_MEMKIND)
+#define HAVE_DEFRAG_MEMKIND
+#endif
 
 void *zmalloc(size_t size);
 void *zcalloc(size_t size);
 void *zrealloc(void *ptr, size_t size);
 void zfree(void *ptr);
+void zfree_dram(void *ptr);
 char *zstrdup(const char *s);
 size_t zmalloc_used_memory(void);
+size_t zmalloc_used_pmem_memory(void);
+size_t zmalloc_used_dram_memory(void);
 void zmalloc_set_oom_handler(void (*oom_handler)(size_t));
 size_t zmalloc_get_rss(void);
 int zmalloc_get_allocator_info(size_t *allocated, size_t *active, size_t *resident);
@@ -92,6 +104,11 @@ size_t zmalloc_get_private_dirty(long pid);
 size_t zmalloc_get_smap_bytes_by_field(char *field, long pid);
 size_t zmalloc_get_memory_size(void);
 void zlibc_free(void *ptr);
+void zmalloc_set_threshold(size_t threshold);
+size_t zmalloc_get_threshold(void);
+void *zmalloc_dram(size_t size);
+void *zcalloc_dram(size_t size);
+void *zrealloc_dram(void *ptr, size_t size);
 
 #ifdef HAVE_DEFRAG
 void zfree_no_tcache(void *ptr);
@@ -107,6 +124,7 @@ size_t zmalloc_usable(void *ptr);
 
 #ifdef REDIS_TEST
 int zmalloc_test(int argc, char **argv);
+int zmalloc_pmem_test(int argc, char **argv);
 #endif
 
 #endif /* __ZMALLOC_H */
