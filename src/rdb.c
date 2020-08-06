@@ -1756,6 +1756,9 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
 
         /* Load every single element of the list */
         while(len--) {
+            if (len%100 == 0) {
+                adjustPmemThresholdCycle();
+            }
             if ((ele = rdbLoadEncodedStringObject(rdb)) == NULL) {
                 decrRefCount(o);
                 return NULL;
@@ -1791,6 +1794,10 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
         for (i = 0; i < len; i++) {
             long long llval;
             sds sdsele;
+
+            if (i%100 == 0) {
+                adjustPmemThresholdCycle();
+            }
 
             if ((sdsele = rdbGenericLoadStringObject(rdb,RDB_LOAD_SDS,NULL)) == NULL) {
                 decrRefCount(o);
@@ -1855,6 +1862,10 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
             sds sdsele;
             double score;
             zskiplistNode *znode;
+
+            if (zsetlen%100 == 0) {
+                adjustPmemThresholdCycle();
+            }
 
             if ((sdsele = rdbGenericLoadStringObject(rdb,RDB_LOAD_SDS,NULL)) == NULL) {
                 decrRefCount(o);
@@ -1929,6 +1940,11 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
         /* Load every field and value into the ziplist */
         while (o->encoding == OBJ_ENCODING_LISTPACK && len > 0) {
             len--;
+
+            if (len%100 == 0) {
+                adjustPmemThresholdCycle();
+            }
+
             /* Load raw strings */
             if ((field = rdbGenericLoadStringObject(rdb,RDB_LOAD_SDS,NULL)) == NULL) {
                 decrRefCount(o);
@@ -2034,6 +2050,10 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
         while (len--) {
             unsigned char *lp;
             size_t encoded_len;
+
+            if (len%100 == 0) {
+                adjustPmemThresholdCycle();
+            }
 
             if (rdbtype == RDB_TYPE_LIST_QUICKLIST_2) {
                 if ((container = rdbLoadLen(rdb,NULL)) == RDB_LENERR) {
@@ -2900,6 +2920,7 @@ int rdbLoadRioWithLoadingCtx(rio *rdb, int rdbflags, rdbSaveInfo *rsi, rdbLoadin
     char buf[1024];
     int error;
     long long empty_keys_skipped = 0;
+    int i = 0;
 
     rdb->update_cksum = rdbLoadProgressCallback;
     rdb->max_processing_chunk = server.loading_process_events_interval_bytes;
@@ -2924,7 +2945,11 @@ int rdbLoadRioWithLoadingCtx(rio *rdb, int rdbflags, rdbSaveInfo *rsi, rdbLoadin
     while(1) {
         sds key;
         robj *val;
-
+        i++;
+        if (i%1000 == 0) {
+            i=0;
+            adjustPmemThresholdCycle();
+        }
         /* Read type. */
         if ((type = rdbLoadType(rdb)) == -1) goto eoferr;
 

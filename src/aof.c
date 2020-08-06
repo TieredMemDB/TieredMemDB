@@ -1431,6 +1431,7 @@ int loadSingleAppendOnlyFile(char *filename) {
             last_progress_report_size += progress_delta;
             processEventsWhileBlocked();
             processModuleLoadingProgressEvent(1);
+            adjustPmemThresholdCycle();
         }
         if (fgets(buf,sizeof(buf),fp) == NULL) {
             if (feof(fp)) {

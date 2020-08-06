@@ -37,10 +37,13 @@
 #define strtold(a,b) ((long double)strtod((a),(b)))
 #endif
 
+#define OBJ_MEMORY_GENERAL  0
+#define OBJ_MEMORY_DRAM     1
+
 /* ===================== Creation and parsing of objects ==================== */
 
 robj *createObject(int type, void *ptr) {
-    robj *o = zmalloc(sizeof(*o));
+    robj *o = zmalloc_dram(sizeof(*o));
     o->type = type;
     o->encoding = OBJ_ENCODING_RAW;
     o->ptr = ptr;
@@ -287,6 +290,12 @@ robj *createModuleObject(moduleType *mt, void *value) {
     return createObject(OBJ_MODULE,mv);
 }
 
+void freeStringObjectOptim(robj *o) {
+    if (o->encoding == OBJ_ENCODING_RAW) {
+        sdsfreeOptim(o->ptr);
+    }
+}
+
 void freeStringObject(robj *o) {
     if (o->encoding == OBJ_ENCODING_RAW) {
         sdsfree(o->ptr);
@@ -367,10 +376,10 @@ void incrRefCount(robj *o) {
     }
 }
 
-void decrRefCount(robj *o) {
+static void _decrRefCount(robj *o, int on_dram) {
     if (o->refcount == 1) {
         switch(o->type) {
-        case OBJ_STRING: freeStringObject(o); break;
+        case OBJ_STRING: freeStringObjectOptim(o); break;
         case OBJ_LIST: freeListObject(o); break;
         case OBJ_SET: freeSetObject(o); break;
         case OBJ_ZSET: freeZsetObject(o); break;
@@ -379,7 +388,11 @@ void decrRefCount(robj *o) {
         case OBJ_STREAM: freeStreamObject(o); break;
         default: serverPanic("Unknown object type"); break;
         }
-        zfree(o);
+        if (on_dram == OBJ_MEMORY_GENERAL || o->encoding == OBJ_ENCODING_EMBSTR) {
+            zfree(o);
+        } else {
+            zfree_dram(o);
+        }
     } else {
         if (o->refcount <= 0) serverPanic("decrRefCount against refcount <= 0");
         if (o->refcount != OBJ_SHARED_REFCOUNT) o->refcount--;
@@ -555,6 +568,14 @@ void dismissObject(robj *o, size_t size_hint) {
 #else
     UNUSED(o); UNUSED(size_hint);
 #endif
+}
+
+void decrRefCount(robj *o) {
+    _decrRefCount(o, OBJ_MEMORY_GENERAL);
+}
+
+void decrRefCountDRAM(robj *o) {
+    _decrRefCount(o, OBJ_MEMORY_DRAM);
 }
 
 /* This variant of decrRefCount() gets its argument as void, and is useful
