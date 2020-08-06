@@ -478,6 +478,12 @@ typedef long long ustime_t; /* microsecond time type. */
 #define REDISMODULE_AUX_BEFORE_RDB (1<<0)
 #define REDISMODULE_AUX_AFTER_RDB (1<<1)
 
+/* Memory allocation policy states */
+#define MEM_POLICY_ONLY_DRAM 0          /* only use DRAM */
+#define MEM_POLICY_ONLY_PMEM 1          /* only use PMEM */
+#define MEM_POLICY_RATIO     2          /* use DRAM and PMEM - ratio variant*/
+#define MEM_POLICY_THRESHOLD 3          /* use DRAM and PMEM - threshold variant*/
+
 struct RedisModule;
 struct RedisModuleIO;
 struct RedisModuleDigest;
@@ -907,6 +913,11 @@ typedef struct clientBufferLimitsConfig {
     time_t soft_limit_seconds;
 } clientBufferLimitsConfig;
 
+typedef struct ratioDramPmemConfig {
+    int pmem_val;
+    int dram_val;
+} ratioDramPmemConfig;
+
 extern clientBufferLimitsConfig clientBufferLimitsDefaults[CLIENT_TYPE_OBUF_COUNT];
 
 /* The redisOp structure defines a Redis Operation, that is an instance of
@@ -1328,6 +1339,16 @@ struct redisServer {
     int lfu_log_factor;             /* LFU logarithmic counter factor. */
     int lfu_decay_time;             /* LFU counter decay factor. */
     long long proto_max_bulk_len;   /* Protocol bulk length maximum size. */
+    /* PMEM */
+    int memory_alloc_policy;                  /* Policy for memory allocation */
+    unsigned int static_threshold;            /* Persistent Memory static threshold */
+    unsigned int initial_dynamic_threshold;   /* Persistent Memory initial dynamic threshold */
+    unsigned int dynamic_threshold_min;       /* Minimum value of dynamic threshold */
+    unsigned int dynamic_threshold_max;       /* Maximum value of dynamic threshold */
+    ratioDramPmemConfig dram_pmem_ratio;      /* DRAM/Persistent Memory ratio */
+    double target_pmem_dram_ratio;            /* Target PMEM/DRAM ratio */
+    int ratio_check_period;                   /* Period of checking ratio in Cron*/
+    int hashtable_on_dram;                    /* Keep hashtable always on DRAM */
     /* Blocked clients */
     unsigned int blocked_clients;   /* # of clients executing a blocking cmd.*/
     unsigned int blocked_clients_by_type[BLOCKED_NUM];
@@ -1729,11 +1750,13 @@ void execCommandPropagateExec(client *c);
 
 /* Redis object implementation */
 void decrRefCount(robj *o);
+void decrRefCountDRAM(robj *o);
 void decrRefCountVoid(void *o);
 void incrRefCount(robj *o);
 robj *makeObjectShared(robj *o);
 robj *resetRefCount(robj *obj);
 void freeStringObject(robj *o);
+void freeStringObjectOptim(robj *o);
 void freeListObject(robj *o);
 void freeSetObject(robj *o);
 void freeZsetObject(robj *o);
@@ -2192,6 +2215,10 @@ unsigned long LFUDecrAndReturn(robj *o);
 uint64_t dictSdsHash(const void *key);
 int dictSdsKeyCompare(void *privdata, const void *key1, const void *key2);
 void dictSdsDestructor(void *privdata, void *val);
+
+/* pmem.c - Handling Persistent Memory */
+void pmemThresholdInit(void);
+void adjustPmemThresholdCycle(void);
 
 /* Git SHA1 */
 char *redisGitSHA1(void);
