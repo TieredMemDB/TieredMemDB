@@ -401,6 +401,15 @@ proc run_external_server_test {code overrides} {
 proc start_server {options {code undefined}} {
     # setup defaults
     set baseconfig "default.conf"
+    if {$::pmem_ratio_test} {
+        set memory-alloc-policy "ratio"
+        set dram-pmem-ratio "1 3"
+        set initial-dynamic-threshold "64"
+        set dynamic-threshold-min "24"
+        set dynamic-threshold-max "10000"
+        set memory-ratio-check-period "100"
+        set hashtable-on-dram "yes"
+    }
     set overrides {}
     set omit {}
     set tags {}
