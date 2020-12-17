@@ -4258,7 +4258,7 @@ sds genRedisInfoString(const char *section) {
         char used_memory_rss_hmem[64];
         char maxmemory_hmem[64];
         size_t zmalloc_used = zmalloc_used_memory();
-        size_t zmalloc_dram_used = zmalloc_used_dram_memory();        
+        size_t zmalloc_dram_used = zmalloc_used_dram_memory();
         size_t zmalloc_pmem_used = zmalloc_used_pmem_memory();
         size_t total_system_mem = server.system_memory_size;
         size_t pmem_threshold = zmalloc_get_threshold();
