@@ -202,9 +202,13 @@ ifeq ($(BUILD_TLS),yes)
 endif
 
 ifeq ($(MALLOC),memkind)
+	HAVE_DAXCTL := $(shell sh -c "(echo 'int main(void) { return 0; }') | $(CC) -x c - -ldaxctl 2>&1 && rm a.out && echo y")
+	ifeq ($(HAVE_DAXCTL), y)
+		DAXCTL_LIB = -ldaxctl
+	endif
 	DEPENDENCY_TARGETS+= memkind
 	FINAL_CFLAGS+= -DUSE_MEMKIND -I../deps/memkind/include
-	FINAL_LIBS+= ../deps/memkind/.libs/libmemkind.a -ldaxctl -lnuma -ldl
+	FINAL_LIBS+= ../deps/memkind/.libs/libmemkind.a $(DAXCTL_LIB) -lnuma -ldl
 endif
 
 REDIS_CC=$(QUIET_CC)$(CC) $(FINAL_CFLAGS)
