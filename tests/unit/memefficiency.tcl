@@ -38,7 +38,7 @@ start_server {tags {"memefficiency"}} {
 
 run_solo {defrag} {
 start_server {tags {"defrag"}} {
-    if {[string match {*jemalloc*} [s mem_allocator]]} {
+    if {[string match {*jemalloc*} [s mem_allocator]] || [s mem_allocator] == "memkind"} {
         test "Active defrag" {
             r config set save "" ;# prevent bgsave from interfereing with save below
             r config set hz 100
@@ -351,6 +351,8 @@ start_server {tags {"defrag"}} {
             r del biglist1 ;# coverage for quicklistBookmarksClear
         } {1}
 
+    }
+    if {[string match {*jemalloc*} [s mem_allocator]]} {
         test "Active defrag edge case" {
             # there was an edge case in defrag where all the slabs of a certain bin are exact the same
             # % utilization, with the exception of the current slab from which new allocations are made
