@@ -471,6 +471,8 @@ start_server {tags {"defrag external:skip"} overrides {appendonly yes auto-aof-r
             r del biglist1 ;# coverage for quicklistBookmarksClear
         } {1}
 
+    }
+    if {[string match {*jemalloc*} [s mem_allocator]]} {
         test "Active defrag edge case" {
             # there was an edge case in defrag where all the slabs of a certain bin are exact the same
             # % utilization, with the exception of the current slab from which new allocations are made
