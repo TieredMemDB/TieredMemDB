@@ -156,6 +156,7 @@ size_t zmalloc_used_memory(void) {
     atomicDecr(used_pmem_memory,__n); \
 } while(0)
 
+static int memory_variant = MEMORY_ONLY_DRAM;
 static size_t pmem_threshold = UINT_MAX;
 static size_t used_dram_memory = 0;
 static size_t used_pmem_memory = 0;
@@ -191,6 +192,7 @@ void *zmalloc_dram(size_t size) {
 
 #ifdef USE_MEMKIND
 static int zmalloc_is_pmem(void * ptr) {
+    if (memory_variant == MEMORY_ONLY_DRAM) return DRAM_LOCATION;
     struct memkind *temp_kind = memkind_detect_kind(ptr);
     return (temp_kind == MEMKIND_DEFAULT) ? DRAM_LOCATION : PMEM_LOCATION;
 }
@@ -435,6 +437,10 @@ size_t zmalloc_get_threshold(void) {
 
 void zmalloc_set_threshold(size_t threshold) {
     pmem_threshold = threshold;
+}
+
+void zmalloc_set_pmem_mode(void) {
+    memory_variant = MEMORY_DRAM_PMEM;
 }
 
 /* Get the RSS information in an OS-specific way.
