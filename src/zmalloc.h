@@ -105,6 +105,7 @@ size_t zmalloc_get_smap_bytes_by_field(char *field, long pid);
 size_t zmalloc_get_memory_size(void);
 void zlibc_free(void *ptr);
 void zmalloc_set_threshold(size_t threshold);
+void zmalloc_set_pmem_mode(void);
 size_t zmalloc_get_threshold(void);
 void *zmalloc_dram(size_t size);
 void *zcalloc_dram(size_t size);

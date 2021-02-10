@@ -49,12 +49,15 @@ void pmemThresholdInit(void) {
             break;
         case MEM_POLICY_ONLY_PMEM:
             zmalloc_set_threshold(0U);
+            zmalloc_set_pmem_mode();
             break;
         case MEM_POLICY_THRESHOLD:
             zmalloc_set_threshold(server.static_threshold);
+            zmalloc_set_pmem_mode();
             break;
         case MEM_POLICY_RATIO:
             zmalloc_set_threshold(server.initial_dynamic_threshold);
+            zmalloc_set_pmem_mode();
             break;
         default:
             serverAssert(NULL);
