@@ -1,0 +1,46 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+
+  test-ubuntu-latest:
+    runs-on: ubuntu-20.04
+    name: Allocator ${{ matrix.allocator }} | Compiler ${{ matrix.env.cc }}
+    strategy:
+      matrix:
+        env:
+          - { cc: gcc, cxx: g++}
+          - { cc: clang, cxx: clang++}
+        allocator: [jemalloc, libc, memkind]
+    steps:
+
+    - name: Checkout repository and submodules
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Install memkind build dependencies
+      run: |
+          if [ "${{ matrix.allocator }}" == memkind ]; then
+            sudo apt install libjson-c-dev libkeyutils-dev libkmod-dev libnuma-dev libudev-dev uuid-dev
+            wget https://github.com/pmem/ndctl/archive/v68.tar.gz
+            tar -xzvf v68.tar.gz
+            pushd ndctl-68 && ./autogen.sh && ./configure --disable-docs --prefix=/usr && make && sudo make install && popd
+          fi
+
+    - name: Install test dependencies
+      run: sudo apt install tcl
+
+    - name: Build TieredMemDB
+      run: make gcov MALLOC=${{ matrix.allocator }}
+
+    - name: Run Tests
+      run: |
+          if [ "${{ matrix.allocator }}" == memkind ]; then
+            MEMKIND_DAX_KMEM_NODES=0 ./runtest --pmem-ratio --clients 1
+          fi
+          ./runtest --clients 1
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v1
