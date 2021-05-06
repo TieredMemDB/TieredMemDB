@@ -45,7 +45,7 @@ static inline size_t absDiff(size_t a, size_t b) {
 void pmemThresholdInit(void) {
     switch(server.memory_alloc_policy) {
         case MEM_POLICY_ONLY_DRAM:
-            zmalloc_set_threshold(UINT_MAX);
+            zmalloc_set_threshold(SIZE_MAX);
             break;
         case MEM_POLICY_ONLY_PMEM:
             zmalloc_set_threshold(0U);
