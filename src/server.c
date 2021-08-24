@@ -2630,7 +2630,7 @@ void initServer(void) {
 
     applyWatchdogPeriod();
 
-    pmemThresholdInit();
+    pmemInit();
     dictSetAllocPolicy(server.hashtable_on_dram);
 }
 
