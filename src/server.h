@@ -505,6 +505,10 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 #define MEM_POLICY_RATIO     2          /* use DRAM and PMEM - ratio variant*/
 #define MEM_POLICY_THRESHOLD 3          /* use DRAM and PMEM - threshold variant*/
 
+/* Persistent Memory variants */
+#define PMEM_VARIANT_SINGLE     0
+#define PMEM_VARIANT_MULTIPLE   1
+
 struct RedisModule;
 struct RedisModuleIO;
 struct RedisModuleDigest;
@@ -1396,6 +1400,7 @@ struct redisServer {
     double target_pmem_dram_ratio;            /* Target PMEM/DRAM ratio */
     int ratio_check_period;                   /* Period of checking ratio in Cron*/
     int hashtable_on_dram;                    /* Keep hashtable always on DRAM */
+    int pmem_variant;                         /* PMEM variant (single or multiple) */
     /* Blocked clients */
     unsigned int blocked_clients;   /* # of clients executing a blocking cmd.*/
     unsigned int blocked_clients_by_type[BLOCKED_NUM];
@@ -2293,7 +2298,7 @@ int dictSdsKeyCompare(void *privdata, const void *key1, const void *key2);
 void dictSdsDestructor(void *privdata, void *val);
 
 /* pmem.c - Handling Persistent Memory */
-void pmemThresholdInit(void);
+void pmemInit(void);
 void adjustPmemThresholdCycle(void);
 
 /* Git SHA1 */
