@@ -29,7 +29,7 @@ jobs:
     - name: Install test dependencies
       run: sudo apt install  tcl8.6 tclx
 
-    - name: Build memKeydB
+    - name: Build TieredMemDB
       run: make gcov MALLOC=${{ matrix.allocator }}
 
     - name: Run Tests
