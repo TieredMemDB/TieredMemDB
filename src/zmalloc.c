@@ -108,6 +108,10 @@ static struct memkind* pmem_kind;
 #define realloc_pmem(ptr,size) memkind_realloc(pmem_kind,ptr,size)
 #define free_dram(ptr) jemk_free(ptr)
 #define free_pmem(ptr) memkind_free(pmem_kind,ptr)
+
+/* Use Memkind to check if there are any DAX KMEM NUMA nodes in the system */
+int memkind_dax_kmem_all_get_mbind_nodemask(struct memkind *kind,
+    unsigned long *nodemask, unsigned long maxnode);
 #endif
 
 #define update_zmalloc_dram_stat_alloc(__n) atomicIncr(used_dram_memory,(__n))
@@ -295,9 +299,32 @@ static void *ztrymalloc_usable_pmem(size_t size, size_t *usable) {
 #endif
 }
 
+static void zmalloc_pmem_oom_handler(size_t size) {
+    unsigned long mask = 0;
+    int err = memkind_dax_kmem_all_get_mbind_nodemask(NULL, &mask, 256);
+    if (err || (mask == 0)) {
+        fprintf(stderr,"\n---------------------------------------------------------------------------------------\n");
+        fprintf(stderr,"!!! It looks like there are no PMEM NUMA nodes or automatic recognition of these nodes\n");
+        fprintf(stderr,"!!! is not working.\n");
+        fprintf(stderr,"!!! Please run \"numactl -H\" to see if it reports any PMEM NUMA nodes (nodes without\n");
+        fprintf(stderr,"!!! CPUs). If so, please provide a list of these nodes in the MEMKIND_DAX_KMEM_NODES\n");
+        fprintf(stderr,"!!! environment variable (see deps/memkind/man/memkind.3 for a description). If not,\n");
+        fprintf(stderr,"!!! please contact your system administrator for proper KMEM_DAX setup.\n");
+        fprintf(stderr,"\n---------------------------------------------------------------------------------------\n");
+        fflush(stderr);
+
+        /* setting alloc threshold to SIZE_MAX effectively disables
+        allocations to PMEM  */
+        zmalloc_set_threshold(SIZE_MAX);
+    }
+
+    /* call default OOM handler here for graceful shutdown */
+    zmalloc_oom_handler(size);
+}
+
 static void *zmalloc_pmem(size_t size) {
     void *ptr = ztrymalloc_usable_pmem(size, NULL);
-    if (!ptr) zmalloc_oom_handler(size);
+    if (!ptr) zmalloc_pmem_oom_handler(size);
     return ptr;
 }
 
@@ -308,7 +335,7 @@ static void *ztrymalloc_pmem(size_t size) {
 
 static void *zmalloc_usable_pmem(size_t size, size_t *usable) {
     void *ptr = ztrymalloc_usable_pmem(size, usable);
-    if (!ptr) zmalloc_oom_handler(size);
+    if (!ptr) zmalloc_pmem_oom_handler(size);
     return ptr;
 }
 
@@ -332,7 +359,7 @@ static void *ztrycalloc_usable_pmem(size_t size, size_t *usable) {
 
 static void *zcalloc_pmem(size_t size) {
     void *ptr = ztrycalloc_usable_pmem(size, NULL);
-    if (!ptr) zmalloc_oom_handler(size);
+    if (!ptr) zmalloc_pmem_oom_handler(size);
     return ptr;
 }
 
@@ -343,7 +370,7 @@ static void *ztrycalloc_pmem(size_t size) {
 
 static void *zcalloc_usable_pmem(size_t size, size_t *usable) {
     void *ptr = ztrycalloc_usable_pmem(size, usable);
-    if (!ptr) zmalloc_oom_handler(size);
+    if (!ptr) zmalloc_pmem_oom_handler(size);
     return ptr;
 }
 
@@ -396,7 +423,7 @@ static void *ztryrealloc_usable_pmem(void *ptr, size_t size, size_t *usable) {
 
 static void *zrealloc_pmem(void *ptr, size_t size) {
     ptr = ztryrealloc_usable_pmem(ptr, size, NULL);
-    if (!ptr && size != 0) zmalloc_oom_handler(size);
+    if (!ptr && size != 0) zmalloc_pmem_oom_handler(size);
     return ptr;
 }
 
@@ -407,7 +434,7 @@ static void *ztryrealloc_pmem(void *ptr, size_t size) {
 
 static void *zrealloc_usable_pmem(void *ptr, size_t size, size_t *usable) {
     ptr = ztryrealloc_usable_pmem(ptr, size, usable);
-    if (!ptr && size != 0) zmalloc_oom_handler(size);
+    if (!ptr && size != 0) zmalloc_pmem_oom_handler(size);
     return ptr;
 }
 
