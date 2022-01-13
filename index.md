@@ -12,6 +12,8 @@
 # TieredMemDB
 TieredMemDB is a Redis branch that fully uses the advantages of DRAM and Intel Optane Persistent Memory (PMEM). It is fully compatible with Redis and supports all its structures and features. The main idea is to use a large PMEM capacity to store user data and DRAM speed for latency-sensitive structures. We also offer the possibility of defining the DRAM to PMEM ratio, which will be automatically monitored and maintained by application. This allows you to fully adapt the utilization of the memory to your hardware configuration.
 
+The source for TieredMemDB can be found in this [GitHub repository](https://github.com/TieredMemDB/TieredMemDB).
+
 # Features
 * Different types of memory - use both DRAM and PMEM in one application.
 * Memory allocation policy - define how each memory should be used. You can specify DRAM / PMEM ratio that will be monitored and maintained by application.
