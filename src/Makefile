@@ -28,15 +28,8 @@ PREFIX?=/usr/local
 INSTALL_BIN=$(PREFIX)/bin
 INSTALL=install
 
-# Default allocator defaults to Jemalloc if it's not an ARM
-MALLOC=libc
-ifneq ($(uname_M),armv6l)
-ifneq ($(uname_M),armv7l)
-ifeq ($(uname_S),Linux)
-	MALLOC=jemalloc
-endif
-endif
-endif
+# TieredMemDB uses the memkind allocator.
+MALLOC=memkind
 
 # To get ARM stack traces if Redis crashes we need a special C flag.
 ifneq (,$(findstring armv,$(uname_M)))
