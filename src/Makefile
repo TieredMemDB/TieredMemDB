@@ -244,7 +244,7 @@ ifeq ($(MALLOC),memkind)
 	endif
 	DEPENDENCY_TARGETS+= memkind
 	FINAL_CFLAGS+= -DUSE_MEMKIND -I../deps/memkind/include
-	FINAL_LIBS+= ../deps/memkind/.libs/libmemkind.a $(DAXCTL_LIB) -lnuma -ldl
+	FINAL_LIBS+= ../deps/memkind/.libs/libmemkind.a $(DAXCTL_LIB) -lnuma -ldl -hwloc
 endif
 
 ifeq ($(BUILD_TLS),yes)
