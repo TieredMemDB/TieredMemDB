@@ -1,20 +1,41 @@
-This README is just a fast *quick start* document. You can find more detailed documentation at [redis.io](https://redis.io).
+TieredMemDB
+===========
 
-What is Redis?
---------------
+This project is a fork of [Redis](https://redis.io), adapted for systems
+with multiple memory tiers.  New memory technologies include memories that
+have very high bandwidth at the cost of latency, slower large capacity
+at lower cost, sharing memory among multiple machines in a rack, and so on.
 
+<<<<<<< HEAD
 Redis is often referred as a *data structures* server. What this means is that Redis provides access to mutable data structures via a set of commands, which are sent using a *server-client* model with TCP sockets and a simple protocol. So different processes can query and modify the same data structures in a shared way.
+=======
+The overall performance of a system can be improved if frequently accessed
+("hot") data is kept in a faster tier while "warm" data that still needs
+to be readily available in memory (rather than disk or similar slow storage)
+yet is not as critical, may be kept in a slower memory tier.
+>>>>>>> 51cab33d7 (Replace README with TMDB-specific description.)
 
-Data structures implemented into Redis have a few special properties:
+This README doesn't describe usual usage of Redis.  We assume you already
+have general experience with Redis.
 
+<<<<<<< HEAD
 * Redis cares to store them on disk, even if they are always served and modified into the server memory. This means that Redis is fast, but that is also non-volatile.
 * Implementation of data structures stress on memory efficiency, so data structures inside Redis will likely use less memory compared to the same data structure modeled using an high level programming language.
 * Redis offers a number of features that are natural to find in a database, like replication, tunable levels of durability, cluster, high availability.
 
 Another good example is to think of Redis as a more complex version of memcached, where the operations are not just SETs and GETs, but operations to work with complex data types like Lists, Sets, ordered data structures, and so forth.
+=======
 
-If you want to know more, this is a list of selected starting points:
+Building TieredMemDB
+--------------------
+>>>>>>> 51cab33d7 (Replace README with TMDB-specific description.)
 
+Generally, TieredMemDB is close to vanilla Redis, and can be used on the
+same set of systems.  You can even build without tier support, as all
+functionality of Redis should be left intact.  To actually get the benefits
+of memory tiers, you need the following extra dependencies:
+
+<<<<<<< HEAD
 * Introduction to Redis data types. http://redis.io/topics/data-types-intro
 * Try Redis directly inside your browser. http://try.redis.io
 * The full list of Redis commands. http://redis.io/commands
@@ -49,13 +70,40 @@ Fixing build problems with dependencies or cached build options
 Redis has some dependencies which are included into the `deps` directory.
 `make` does not automatically rebuild dependencies even if something in
 the source code of dependencies changes.
+=======
+    * ndctl and daxctl
+    * memkind (included in tarballs)
 
-When you update the source code with `git pull` or when code inside the
-dependencies tree is modified in any other way, make sure to use the following
-command in order to really clean everything and rebuild from scratch:
+Building TieredMemDB is as simple as:
 
-    make distclean
+    % make
 
+As usual, you can -- and probably want to -- confirm the built code works
+well:
+
+    % make test
+
+The crux of TieredMemDB is the tiered allocator, which beside `MALLOC=libc`
+and `MALLOC=jemalloc` supported by Redis adds:
+
+    % make MALLOC=memkind
+
+but in release tarballs this is already the default.
+
+
+Rebasing TieredMemDB
+--------------------
+>>>>>>> 51cab33d7 (Replace README with TMDB-specific description.)
+
+The set of patches over base Redis that comprises TieredMemDB can be applied
+onto your modified versions of Redis as well.  To do that, or to update
+Redis to a new minor version (because of eg. a security update), you rebase
+the tree available on [GitHub](https://github.com/TieredMemDB/TieredMemDB),
+or ask git to produce a patch, with our branch checked out:
+
+    % git diff 6.2.6 @
+
+<<<<<<< HEAD
 This will clean: jemalloc, lua, hiredis, linenoise.
 
 Also if you force certain build options like 32bit target, no C compiler
@@ -444,3 +492,6 @@ cover everything. We want to just help you with the first steps.
 Eventually you'll find your way inside the Redis code base :-)
 
 Enjoy!
+=======
+which can then be applied via `patch` over, in this case, Redis 6.2.6.
+>>>>>>> 51cab33d7 (Replace README with TMDB-specific description.)
