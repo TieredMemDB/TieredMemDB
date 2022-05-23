@@ -34,7 +34,7 @@ INSTALL_BIN=$(PREFIX)/bin
 INSTALL=install
 PKG_CONFIG?=pkg-config
 
-# Default allocator defaults to memkind
+# TieredMemDB uses the memkind allocator.
 MALLOC=memkind
 
 # To get ARM stack traces if Redis crashes we need a special C flag.
