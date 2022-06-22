@@ -88,7 +88,7 @@ memkind: .make-prerequisites
 	@printf '%b %b\n' $(MAKECOLOR)MAKE$(ENDCOLOR) $(BINCOLOR)$@$(ENDCOLOR)
 	if ! [ -x memkind/configure ];then cd memkind && ./autogen.sh; fi
 	cd memkind && ARENA_LIMIT=1 MIN_LG_ALIGN=3 ./configure --disable-heap-manager
-	cd memkind && $(MAKE)
+	cd memkind && $(MAKE) jemalloc_deps static_lib
 
 .PHONY: memkind
 
