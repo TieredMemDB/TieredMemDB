@@ -12,9 +12,15 @@ jobs:
     if: github.event_name != 'schedule' || github.repository == 'redis/redis'
     timeout-minutes: 14400
     steps:
+    - name: Install memkind dependencies
+      run: sudo apt install libnuma-dev libdaxctl-dev
+
     - uses: actions/checkout@v3
     - name: Build
-      run: make REDIS_CFLAGS=-Werror
+      run: |
+        git submodule init
+        git submodule update
+        make REDIS_CFLAGS=-Werror
     - name: Start redis-server
       run: |
         ./src/redis-server --daemonize yes --save "" --logfile external-redis.log \
@@ -36,9 +42,15 @@ jobs:
     if: github.event_name != 'schedule' || github.repository == 'redis/redis'
     timeout-minutes: 14400
     steps:
+    - name: Install memkind dependencies
+      run: sudo apt install libnuma-dev libdaxctl-dev
+
     - uses: actions/checkout@v3
     - name: Build
-      run: make REDIS_CFLAGS=-Werror
+      run: |
+        git submodule init
+        git submodule update
+        make REDIS_CFLAGS=-Werror
     - name: Start redis-server
       run: |
         ./src/redis-server --cluster-enabled yes --daemonize yes --save "" --logfile external-redis.log \
@@ -63,9 +75,15 @@ jobs:
     if: github.event_name != 'schedule' || github.repository == 'redis/redis'
     timeout-minutes: 14400
     steps:
+      - name: Install memkind dependencies
+        run: sudo apt install libnuma-dev libdaxctl-dev
+
       - uses: actions/checkout@v3
       - name: Build
-        run: make REDIS_CFLAGS=-Werror
+        run: |
+          git submodule init
+          git submodule update
+          make REDIS_CFLAGS=-Werror
       - name: Start redis-server
         run: |
           ./src/redis-server --daemonize yes --save "" --logfile external-redis.log
