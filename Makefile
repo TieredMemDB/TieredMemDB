@@ -30,6 +30,9 @@ AUTOCONFAGE=Makefile.in \
 	test-driver
 
 TARBALL=tmdb-$(shell git describe --tags)
+# Before running this target, two steps are required:
+# make
+# git submodule update --init
 git-tarball:
 	git archive --prefix=$(TARBALL)/ @ >../$(TARBALL).tar
 	cd deps/memkind && git archive --prefix=$(TARBALL)/deps/memkind/ @ >../../memkind.tar
