@@ -31,9 +31,18 @@ ifneq (,$(findstring FreeBSD,$(uname_S)))
   STD+=-Wno-c11-extensions
 endif
 endif
-WARN=-Wall -W -Wno-missing-field-initializers
+WARN=-Wall -W -Wno-missing-field-initializers -Wformat -Wformat-security -Werror
 OPT=$(OPTIMIZATION)
-
+SECURITY_PIC=-fPIE -fPIC
+SECURITY_NO_EXEC=-Wl,-z,relro,-z,now,-z,noexecstack
+SECURITY_FORTIFY_SOURCE=""
+ifneq ($(OPTIMIZATION),-O0)
+	# the -D_FORTIFY_SOURCE flag only works with optimization eneabled
+	SECURITY_FORTIFY_SOURCE=-D_FORTIFY_SOURCE=2
+else
+	$(warning Optimization is required to set _FORTIFY_SOURCE)
+endif
+SECURITY_FLAGS=$(SECURITY_PIC) $(SECURITY_NO_EXEC) $(SECURITY_FORTIFY_SOURCE)
 # Detect if the compiler supports C11 _Atomic.
 # NUMBER_SIGN_CHAR is a workaround to support both GNU Make 4.3 and older versions.
 NUMBER_SIGN_CHAR := \#
@@ -112,8 +121,8 @@ endif
 # Override default settings if possible
 -include .make-settings
 
-FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DEBUG) $(CFLAGS) $(REDIS_CFLAGS)
-FINAL_LDFLAGS=$(LDFLAGS) $(REDIS_LDFLAGS) $(DEBUG)
+FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DEBUG) $(CFLAGS) $(REDIS_CFLAGS) $(SECURITY_FLAGS)
+FINAL_LDFLAGS=$(LDFLAGS) $(REDIS_LDFLAGS) $(DEBUG) $(SECURITY_FLAGS)
 FINAL_LIBS=-lm
 DEBUG=-g -ggdb
 
