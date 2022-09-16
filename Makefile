@@ -28,7 +28,7 @@ AUTOCONFAGE=Makefile.in \
 	m4/lt~obsolete.m4 \
 	missing
 
-TARBALL=tmdb-$(shell git describe --tags)
+TARBALL=tmdb-redis-$(shell git describe --tags --match "[0-9].[0-9].[0-9-]*")
 git-tarball:
 	git archive --prefix=$(TARBALL)/ @ >../$(TARBALL).tar
 	cd deps/memkind && git archive --prefix=$(TARBALL)/deps/memkind/ @ >../../memkind.tar
