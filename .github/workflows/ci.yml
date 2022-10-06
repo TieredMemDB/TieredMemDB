@@ -4,6 +4,49 @@ on: [push, pull_request]
 
 jobs:
 
+  test-tarball:
+    runs-on: ubuntu-22.04
+    name: Test tarball | Compiler ${{ matrix.env.cc }}
+    strategy:
+      matrix:
+        env:
+          - { cc: gcc, cxx: g++}
+          - { cc: clang, cxx: clang++}
+
+    steps:
+
+    - name: Checkout repository and submodules
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        submodules: recursive
+
+    - id: get-tarball-name
+      run: echo "::set-output name=tarball-name::$(git describe --tags --match "[1-9].[0-9].[0-9]*")"
+
+    - name: Install memkind build dependencies
+      run: |
+          sudo apt-get install libnuma-dev libdaxctl-dev
+
+    - name: Build TieredMemDB
+      run: make
+
+    - name: Build tarball
+      run: make git-tarball
+
+    - name: Build from tarball
+      run: |
+          cd ..
+          tar -xJf tmdb-redis-${{ steps.get-tarball-name.outputs.tarball-name }}.tar.xz
+          cd tmdb-redis-${{ steps.get-tarball-name.outputs.tarball-name }}
+          make
+
+    - name: Default tests
+      run: make test
+
+    - name: Pmem tests
+      run: MEMKIND_DAX_KMEM_NODES=0 ./runtest --pmem-ratio
+
   test-ubuntu-latest:
     runs-on: ubuntu-20.04
     name: Allocator ${{ matrix.allocator }} | Compiler ${{ matrix.env.cc }}
