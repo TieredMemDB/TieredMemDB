@@ -25,7 +25,10 @@ of memory tiers, you need the following extra dependencies:
 
     * ndctl and daxctl (v66 or later)
 
-When building from git, you also need to check out the memkind submodule,
+When building from git, you also need to check out the memkind submodule:
+
+    % git submodule update --init
+
 and install:
 
     * autoconf
@@ -38,3 +41,19 @@ As usual, you can -- and probably want to -- confirm the built code works
 well:
 
     % make test
+
+In case of building error saying libmemkind.a is missing you can try and
+clean your repository (before that, please make sure to commit all your changes, if any):
+
+    % git clean -dfx
+
+and then re-run the make command.
+
+To prepare a tarball with TieredMemDB packed along with memkind, easy to use
+in another environment, you have to initialize memkind submodule (as in the above steps)
+and execute:
+
+    % make git-tarball
+
+Such tarball is prepared in a parent directory (named like: "tmdb-redis-<version>.tar.xz").
+After extracting the package it's only required to build TMDB with a simple 'make' command.
