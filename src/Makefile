@@ -31,7 +31,7 @@ ifneq (,$(findstring FreeBSD,$(uname_S)))
   STD+=-Wno-c11-extensions
 endif
 endif
-WARN=-Wall -W -Wno-missing-field-initializers -Wformat -Wformat-security -Werror
+WARN=-Wall -W -Wno-unused-command-line-argument -Wno-missing-field-initializers -Wformat -Wformat-security -Werror
 OPT=$(OPTIMIZATION)
 SECURITY_PIC=-fPIE -fPIC
 SECURITY_NO_EXEC=-Wl,-z,relro,-z,now,-z,noexecstack
