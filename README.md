@@ -57,3 +57,10 @@ and execute:
 
 Such tarball is prepared in a parent directory (named like: "tmdb-redis-<version>.tar.xz").
 After extracting the package it's only required to build TMDB with a simple 'make' command.
+
+Contact points
+--------------
+
+If you want to get in touch with the maintenance team of this project, please file an
+issue on the GitHub page of this repository or reach out to
+Lin, Xiang <xiang.lin@intel.com> or Chen, Xiaobo <xiaobo.chen@intel.com>.
