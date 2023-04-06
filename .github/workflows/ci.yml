@@ -3,20 +3,19 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-
   test-tarball:
+    # check compilation and tarball creation with various compilers
     runs-on: ubuntu-22.04
     name: Test tarball | Compiler ${{ matrix.env.cc }}
     strategy:
+      fail-fast: false
       matrix:
         env:
           - { cc: gcc, cxx: g++}
           - { cc: clang, cxx: clang++}
-
     steps:
-
     - name: Checkout repository and submodules
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
         submodules: recursive
@@ -25,32 +24,33 @@ jobs:
       run: echo "::set-output name=tarball-name::$(git describe --tags --match "[1-9].[0-9].[0-9]*")"
 
     - name: Install memkind build dependencies
-      run: |
-          sudo apt-get install libnuma-dev libdaxctl-dev
+      run: sudo apt-get install libnuma-dev libdaxctl-dev
 
     - name: Build TieredMemDB
-      run: make
+      run: CC=${{matrix.env.cc}} CXX=${{matrix.env.cxx}} make
 
     - name: Build tarball
-      run: make git-tarball
+      run: CC=${{matrix.env.cc}} CXX=${{matrix.env.cxx}} make git-tarball
 
     - name: Build from tarball
       run: |
           cd ..
           tar -xJf tmdb-redis-${{ steps.get-tarball-name.outputs.tarball-name }}.tar.xz
           cd tmdb-redis-${{ steps.get-tarball-name.outputs.tarball-name }}
-          make
+          CC=${{matrix.env.cc}} CXX=${{matrix.env.cxx}} make
 
     - name: Default tests
-      run: make test
+      run: CC=${{matrix.env.cc}} CXX=${{matrix.env.cxx}} make test
 
     - name: Pmem tests
       run: MEMKIND_DAX_KMEM_NODES=0 ./runtest --pmem-ratio
 
-  test-ubuntu-latest:
+  test-allocators:
+    # check compilation with various allocators
     runs-on: ubuntu-20.04
     name: Allocator ${{ matrix.allocator }} | Compiler ${{ matrix.env.cc }}
     strategy:
+      fail-fast: false
       matrix:
         env:
           - { cc: gcc, cxx: g++}
@@ -70,7 +70,7 @@ jobs:
           fi
 
     - name: Install test dependencies
-      run: sudo apt install  tcl8.6 tclx
+      run: sudo apt install tcl8.6 tclx
 
     - name: Build TieredMemDB
       run: make gcov MALLOC=${{ matrix.allocator }}
@@ -86,14 +86,20 @@ jobs:
       uses: codecov/codecov-action@v1
 
   test-sanitizer-address:
+    # static analysis
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: checkout repository
+        uses: actions/checkout@v3
+
       - name: make
         run: make SANITIZER=address REDIS_CFLAGS='-Werror'
+
       - name: testprep
         run: sudo apt-get install tcl8.6 tclx -y
+
       - name: test
         run: ./runtest --verbose --tags -slow --dump-logs
+
       - name: module api test
         run: ./runtest-moduleapi --verbose --dump-logs
